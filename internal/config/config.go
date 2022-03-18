@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/99designs/keyring"
@@ -86,9 +86,9 @@ func ConfigDir() (string, error) {
 func ProjectConfigPath() (string, error) {
 	basePath, err := RootGitRepoDir()
 	if err == nil {
-		return path.Join(basePath, projectConfigName), nil
+		return filepath.Join(basePath, projectConfigName), nil
 	}
-	return path.Join("", projectConfigName), nil
+	return filepath.Join("", projectConfigName), nil
 }
 
 func RootGitRepoDir() (string, error) {
@@ -98,7 +98,7 @@ func RootGitRepoDir() (string, error) {
 		return "", errors.New("unable to find git root directory")
 	}
 
-	return string(strings.TrimSuffix(string(out), "\n")), nil
+	return strings.TrimSuffix(string(out), "\n"), nil
 }
 
 func ProjectConfigFile() string {
@@ -196,7 +196,7 @@ func accessTokenPath() (string, error) {
 		return "", err
 	}
 
-	return path.Join(dir, keyringKey), nil
+	return filepath.Join(dir, keyringKey), nil
 }
 
 func readAccessTokenPath() ([]byte, error) {
