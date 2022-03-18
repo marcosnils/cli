@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -9,6 +8,8 @@ import (
 	"path"
 	"strings"
 
+	"github.com/99designs/keyring"
+	"github.com/pkg/errors"
 	ps "github.com/planetscale/planetscale-go/planetscale"
 
 	"github.com/mitchellh/go-homedir"
@@ -19,7 +20,9 @@ const (
 	defaultConfigPath = "~/.config/planetscale"
 	projectConfigName = ".pscale.yml"
 	configName        = "pscale.yml"
-	TokenFileMode     = 0600
+	keyringService    = "pscale"
+	keyringKey        = "access-token"
+	tokenFileMode     = 0600
 )
 
 // Config is dynamically sourced from various files and environment variables.
@@ -37,32 +40,13 @@ type Config struct {
 }
 
 func New() (*Config, error) {
-	var accessToken []byte
-	tokenPath, err := AccessTokenPath()
+	accessToken, err := readAccessToken()
 	if err != nil {
 		return nil, err
 	}
 
-	stat, err := os.Stat(tokenPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			log.Fatal(err)
-		}
-	} else {
-		if stat.Mode()&^TokenFileMode != 0 {
-			err = os.Chmod(tokenPath, TokenFileMode)
-			if err != nil {
-				log.Printf("Unable to change %v file mode to 0%o: %v", tokenPath, TokenFileMode, err)
-			}
-		}
-		accessToken, err = ioutil.ReadFile(tokenPath)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
 	return &Config{
-		AccessToken: string(accessToken),
+		AccessToken: accessToken,
 		BaseURL:     ps.DefaultBaseURL,
 	}, nil
 }
@@ -97,16 +81,6 @@ func ConfigDir() (string, error) {
 	return dir, nil
 }
 
-// AccessTokenPath is the path for the access token file
-func AccessTokenPath() (string, error) {
-	dir, err := ConfigDir()
-	if err != nil {
-		return "", err
-	}
-
-	return path.Join(dir, "access-token"), nil
-}
-
 // ProjectConfigPath returns the path of a configuration inside a Git
 // repository.
 func ProjectConfigPath() (string, error) {
@@ -129,4 +103,180 @@ func RootGitRepoDir() (string, error) {
 
 func ProjectConfigFile() string {
 	return projectConfigName
+}
+
+func readAccessToken() (string, error) {
+	ring, err := openKeyring()
+
+	if errors.Is(err, keyring.ErrNoAvailImpl) {
+		accessToken, tokenErr := readAccessTokenPath()
+		return string(accessToken), tokenErr
+	}
+
+	item, err := ring.Get(keyringKey)
+	if err == nil {
+		return string(item.Data), nil
+	}
+
+	if errors.Is(err, keyring.ErrKeyNotFound) {
+		// Migrate to keychain
+		accessToken, tokenErr := readAccessTokenPath()
+		if len(accessToken) > 0 && tokenErr == nil {
+			return migrateAccessToken(ring, accessToken)
+		}
+		return "", nil
+	}
+
+	return "", err
+}
+
+func migrateAccessToken(ring keyring.Keyring, accessToken []byte) (string, error) {
+	err := ring.Set(keyring.Item{
+		Key:  keyringKey,
+		Data: accessToken,
+	})
+	if err != nil {
+		return "", err
+	}
+	path, err := accessTokenPath()
+	if err != nil {
+		return "", err
+	}
+	err = os.Remove(path)
+	if err != nil {
+		return "", err
+	}
+	return string(accessToken), nil
+}
+
+func WriteAccessToken(accessToken string) error {
+	ring, err := openKeyring()
+
+	if errors.Is(err, keyring.ErrNoAvailImpl) {
+		return writeAccessTokenPath(accessToken)
+	}
+
+	return ring.Set(keyring.Item{
+		Key:  keyringKey,
+		Data: []byte(accessToken),
+	})
+}
+
+func DeleteAccessToken() error {
+	ring, err := openKeyring()
+
+	if errors.Is(err, keyring.ErrNoAvailImpl) {
+		return deleteAccessTokenPath()
+	}
+
+	return ring.Remove(keyringKey)
+}
+
+func openKeyring() (keyring.Keyring, error) {
+	return keyring.Open(keyring.Config{
+		AllowedBackends: []keyring.BackendType{
+			keyring.SecretServiceBackend,
+			keyring.KWalletBackend,
+			keyring.KeychainBackend,
+			keyring.WinCredBackend,
+		},
+		ServiceName:              keyringService,
+		KeychainTrustApplication: true,
+		KeychainSynchronizable:   true,
+	})
+}
+
+func accessTokenPath() (string, error) {
+	dir, err := ConfigDir()
+	if err != nil {
+		return "", err
+	}
+
+	return path.Join(dir, keyringKey), nil
+}
+
+func readAccessTokenPath() ([]byte, error) {
+	var accessToken []byte
+	tokenPath, err := accessTokenPath()
+	if err != nil {
+		return nil, err
+	}
+
+	stat, err := os.Stat(tokenPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Fatal(err)
+		}
+		return nil, err
+	} else {
+		if stat.Mode()&^tokenFileMode != 0 {
+			err = os.Chmod(tokenPath, tokenFileMode)
+			if err != nil {
+				log.Printf("Unable to change %v file mode to 0%o: %v", tokenPath, tokenFileMode, err)
+			}
+		}
+		accessToken, err = ioutil.ReadFile(tokenPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	return accessToken, nil
+}
+
+func deleteAccessTokenPath() error {
+	tokenPath, err := accessTokenPath()
+	if err != nil {
+		return err
+	}
+
+	err = os.Remove(tokenPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return errors.Wrap(err, "error removing access token file")
+		}
+	}
+
+	configFile, err := DefaultConfigPath()
+	if err != nil {
+		return err
+	}
+
+	err = os.Remove(configFile)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return errors.Wrap(err, "error removing default config file")
+		}
+	}
+	return nil
+}
+
+func writeAccessTokenPath(accessToken string) error {
+	configDir, err := ConfigDir()
+	if err != nil {
+		return err
+	}
+
+	_, err = os.Stat(configDir)
+	if os.IsNotExist(err) {
+		err := os.MkdirAll(configDir, 0771)
+		if err != nil {
+			return errors.Wrap(err, "error creating config directory")
+		}
+	} else if err != nil {
+		return err
+	}
+
+	tokenPath, err := accessTokenPath()
+	if err != nil {
+		return err
+	}
+
+	tokenBytes := []byte(accessToken)
+	err = ioutil.WriteFile(tokenPath, tokenBytes, tokenFileMode)
+	if err != nil {
+		return errors.Wrap(err, "error writing token")
+	}
+
+	return nil
 }

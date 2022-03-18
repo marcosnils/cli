@@ -3,6 +3,7 @@ module github.com/planetscale/cli
 go 1.16
 
 require (
+	github.com/99designs/keyring v1.2.1 // indirect
 	github.com/AlecAivazis/survey/v2 v2.3.2
 	github.com/benbjohnson/clock v1.3.0
 	github.com/briandowns/spinner v1.18.1
