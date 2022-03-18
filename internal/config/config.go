@@ -22,7 +22,7 @@ const (
 	configName        = "pscale.yml"
 	keyringService    = "pscale"
 	keyringKey        = "access-token"
-	tokenFileMode     = 0600
+	tokenFileMode     = 0o600
 )
 
 // Config is dynamically sourced from various files and environment variables.
