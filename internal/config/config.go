@@ -124,6 +124,10 @@ func readAccessToken() (string, error) {
 		if len(accessToken) > 0 && tokenErr == nil {
 			return migrateAccessToken(ring, accessToken)
 		}
+		// Might need to improve this, but today the empty
+		// token value represents no auth known, and we should
+		// not error here since that breaks if you're not logged
+		// in yet.
 		return "", nil
 	}
 
