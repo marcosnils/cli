@@ -1,10 +1,10 @@
 ---
 name: golang.org/x/term
-version: v0.0.0-20210503060354-a79de5458b56
+version: v0.0.0-20210927222741-03fcf44c2211
 type: go
 summary: Package term provides support functions for dealing with terminals, as commonly
   found on UNIX systems.
-homepage: https://godoc.org/golang.org/x/term
+homepage: https://pkg.go.dev/golang.org/x/term
 license: bsd-3-clause
 licenses:
 - sources: LICENSE

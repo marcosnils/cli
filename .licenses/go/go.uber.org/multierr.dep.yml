@@ -1,14 +1,14 @@
 ---
 name: go.uber.org/multierr
-version: v1.6.0
+version: v1.8.0
 type: go
 summary: Package multierr allows combining one or more errors together.
-homepage: https://godoc.org/go.uber.org/multierr
+homepage: https://pkg.go.dev/go.uber.org/multierr
 license: mit
 licenses:
 - sources: LICENSE.txt
   text: |
-    Copyright (c) 2017 Uber Technologies, Inc.
+    Copyright (c) 2017-2021 Uber Technologies, Inc.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
