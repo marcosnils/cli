@@ -3,7 +3,7 @@ release:
   prerelease: auto # don't publish release with -rc1,-pre, etc suffixes
 before:
   hooks:
-    - go mod tidy
+    - go mod tidy -go=1.17
     - ./script/completions
 builds:
   - env:
